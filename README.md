@@ -1,308 +1,326 @@
 # Best disposable email blocker
 
-**A static GitHub blocklist of disposable email domains catches roughly 80 percent of trial abuse** for a low-ticket B2C product. That is a real number, and it is also the number that lulls teams into shipping a blocker that quietly fails on the other 20 percent - the 20 percent that actually costs you.
+Let's start with the number that breaks the marketing copy.
 
-I have wired disposable-email defense into more signup funnels than I can remember, and the pattern is always the same. Someone grabs a domain list, drops it in, and declares the fake-signup problem solved. Then three weeks later **the trial abuse is back, because the attacker switched to subaddressing, or Apple's Hide My Email, or a freshly registered catch-all domain that is not on any list yet.**
+59 percent. That's the average detection rate across 17 disposable email services tested in an independent January 2026 benchmark. One paid service (WhoisXML) caught zero out of 16 known disposable providers. The top performer caught 16 out of 16. Zero correlation between price and accuracy.
 
-So let me name the lie up front. "Disposable email blocker" sounds like a complete product. **It is not. It is one filter, and on its own it is a leaky one.** A real defense is a static list plus subaddress normalization plus MX-record liveness plus - and this is the part everyone skips - actually knowing whether the human behind a syntactically valid address is a human.
+Every vendor in this category claims 99 point something accuracy. The independent data says otherwise.
 
-This is not a "buy this one API" post. This is a tiered, honest read on 18 tools that touch this problem, sorted by what they actually do. Some of them are not even email tools. [DataCops](/signup-cops) sits at the top because it is the only one that treats the disposable email as a symptom of bot signups, not the whole disease - but most of this list is just assessed straight, no pitch. See also [free trial abuse prevention](/resources/best-free-trial-abuse-prevention).
+The deeper issue is that 'disposable email blocker' is the wrong frame for 2026. Static GitHub lists (the 4,000-domain disposable-email-domains repo, the 100,000-domain disposable/disposable repo) are good enough for a lot of low-ticket B2C signups. Until they aren't. Decay rate on a static list is 64 percent accuracy at one week, 43 percent at one month. And the bypasses that actually matter aren't on those lists at all. Plus addressing. Apple Hide My Email. Catch-all domains. Campaign-specific throwaway domains (Castle tracked 1,700 of those in October 2025 alone, each responsible for 400 plus abusive signup attempts).
+
+I run signup fraud at DataCops. We've benchmarked 30 tools across the disposable-email and signup-trust category. This post is the brutally honest stack guide. Not a vendor pitch. The actual decision tree.
+
+---
 
 ## Quick stuff people keep asking
 
-**What is the best free disposable email checker?** For a static-list use case, an open-source GitHub domain list updated daily is genuinely fine and free. For B2C marketplaces where a [fake account](/resources/best-fake-account-detection-2026) costs you real money, free list-only tools miss subaddressing and relay services - you want something that normalizes addresses and scores the signup, not just the domain.
+**Are GitHub disposable email lists still useful?** Yes for the 80 percent case (low-ticket B2C, no referral abuse). Use one. Just know the decay rate. A week-old list is 64 percent accurate. A month-old list is 43 percent. Refresh weekly or pull from the API of a maintainer who refreshes daily.
 
-**How do I block temporary email signups?** Three layers. Normalize the address first (strip +tags, collapse dots). Check it against a daily-updated disposable domain list. Then verify the mailbox is live with an MX and SMTP check. A single layer leaves an obvious hole.
+**Should I block Apple Hide My Email?** No. privaterelay.appleid.com is a paying iCloud Plus user, not a disposable abuser. Blocking the TLD locks out real customers. Apple Hide My Email is a do-not-block exception, not a tempmail.
 
-**Does Gmail allow disposable emails?** Gmail is not disposable, but Gmail subaddressing - yourname+anything@gmail.com - lets one inbox spawn unlimited unique-looking addresses. If your blocker does not normalize the plus tag, one Gmail account becomes infinite trial signups.
+**What's the difference between deliverability tools and anti-fraud tools?** Deliverability tools (Kickbox, ZeroBounce) check whether an email will land in an inbox. Anti-fraud tools (IPQualityScore, Castle, SignUp Cops) check whether the signer-up is real. They get conflated in vendor marketing. They are not the same product.
 
-**How accurate are disposable email detection APIs?** Good ones claim 99 percent-plus on known disposable domains. The honest catch: accuracy on the known-domain problem is easy. The hard part is brand-new domains and relay services, where every vendor's number quietly drops.
+**Is 99 percent accuracy real?** Mostly marketing. The January 2026 Prospeo benchmark of 17 services found 59 percent average against a known-disposable test set. Vendor accuracy claims do not survive independent testing.
 
-**Is blocking disposable emails GDPR compliant?** Yes. Checking an email address against a domain list at signup is legitimate fraud prevention. It does not require consent. Be careful only with how you store and log the data afterward.
+**Should I hard-block disposable emails or soft-restrict?** Soft-restrict. Allow the signup, restrict free-trial features or quotas. Hard-blocking creates false positives that cost real customers. The big trade-off in this category.
 
-**What is a tempmail domain?** A domain behind a throwaway inbox service - mailinator, temp-mail, guerrillamail and thousands of rotating others - that gives anyone a working address for a few minutes with no identity attached.
+---
 
-**Can disposable email detection be bypassed?** Yes, routinely. Subaddressing, catch-all domains, Apple Hide My Email, Firefox Relay, and brand-new domains all slip past list-based blockers. This is exactly why an address check alone is not a fraud defense.
+## The four bypasses every static blocker misses
 
-## The gap a domain list cannot close
+This is the part the listicle pages skip. Even the best static disposable-email list misses these by definition.
 
-Here is the structural problem with thinking of this as an "email" problem at all.
+**Plus addressing and subaddressing.** `user+throwaway@gmail.com` reaches the same inbox as `user@gmail.com`. Most signup forms accept the plus version as a unique account. Static lists don't normalize. One real Gmail account creates infinite "unique" signups.
 
-A disposable email blocker answers one question: is this address from a throwaway provider? Useful. But it never answers the question that actually matters: did a real human create this account, or did a bot?
+**Apple Hide My Email.** privaterelay.appleid.com aliases. These are real iCloud Plus users routing email through Apple's relay. They convert. They pay. Blocking the TLD blocks real customers. The static blocklists that hard-block this TLD are losing you money.
 
-Those are not the same question. A bot can sign up with a perfectly clean Gmail address. A syntactically valid, MX-passing, not-on-any-blocklist address tells you nothing about whether a human is behind it. Every email-validation tool on this list verifies the envelope. Almost none of them verify the sender.
+**Catch-all domains.** Anyone who owns a domain can configure a catch-all so any address `*@theirdomain.com` reaches a single inbox. Static lists don't catch random domains.
 
-And the scale of the miss is not small. Of the signups and sessions a typical funnel collects, industry bot estimates put 24 to 31 percent as non-human. Layer on top of that the fact that 25 to 35 percent of analytics scripts get blocked outright by uBlock and Brave before they fire - so your real, privacy-conscious humans are partly invisible while bots with clean email addresses sail through.
+**Campaign-specific throwaway domains.** This is the Castle finding. October 2025 they tracked 1,700 domains each responsible for 400 plus abusive signup attempts. None of these were on the public lists. They were custom domains spun up for specific abuse campaigns. Static lists by definition can't catch these.
 
-Let me make it concrete. A company called PillarlabAI ran a honeypot - a clean signup funnel, watching what came in. 3,000 signups. Seventy-seven percent were fraud. And 650 of those accounts traced to a single [device fingerprint](/alternative/fingerprintjs-alternative). One machine, 650 identities. Now ask yourself: how many of those 650 used a disposable email domain? Some. But a competent attacker uses real-looking addresses, because they know you are checking the domain. A disposable-email blocker would have caught the lazy fraction and waved through the rest.
+If your blocker only handles 'is this address in the disposable list', you're catching maybe 60 percent of the actual abuse and missing all four bypass classes.
 
-It gets worse downstream. Those bot signups generated ad clicks and conversion events. Meta and Google log them as real humans interested in your product. The algorithms then optimize toward that pattern and go find more bots that look the same. Your [ROAS](/resources/facebook-roas-improvement-guide-from-black-box-to-profit-engine) erodes while your dashboard looks healthy. Garbage in, garbage optimized, garbage out - and a domain blocklist never touches any of it.
+---
 
-The fix is architectural. You need signup signal - device fingerprint, IP reputation, behavioral pattern - fused with the email check, on first-party infrastructure, before the data leaves your control. The disposable email is one weak signal among many. Treating it as the whole answer is the actual mistake.
+## Tier 1: the static GitHub lists
 
-## Tool rankings
+These are free, open source, and the right starting point for a lot of low-ticket B2C use cases. They have known limits.
 
-### Tier 1 - signup intelligence, not just an email check
+**1. disposable-email-domains (the 4k list, MattKetmo et al.)**
 
-**DataCops (SignUp Cops).**
+The Good: Free. Maintained for over a decade. Used by thousands of products. Fast lookup.
 
-**What it is:** first-party trust infrastructure that scores signups for fraud and ships clean conversions to ad platforms, all through one pipeline on your own subdomain.
+Frustrations: 64 percent accuracy at 1 week of staleness, 43 percent at 1 month. Bus-factor risk on solo maintainers. Doesn't normalize subaddressing. Doesn't handle Apple Hide My Email exceptions. Misses campaign-specific throwaway domains.
 
-**What it does well:** it treats the disposable email as one signal among many. SignUp Cops fuses email freshness with device fingerprinting, behavioral pattern, and IP intelligence across a 361.8 billion-plus IP database that separates residential traffic from datacenter, VPN, proxy, and Tor. Because the same pipeline also delivers conversions to Meta, Google, TikTok, and LinkedIn, a flagged bot signup does not just get scored - it stops poisoning your ad optimization.
+Wish List: Faster updates. Subaddressing normalization built in.
 
-**Where it breaks:** DataCops is the newer brand on this list, and [SOC 2](/enterprise) Type II is still in progress, so a regulated buyer who needs that attestation today has a real reason to wait. It surfaces fraud context rather than claiming to "block" everything, and shared [CAPI](/conversion-api) delivery is still in verification - I would rather state that than oversell it.
+Value for Money: 7/10 at zero dollars. Excellent baseline.
 
-**Value for money:** 9/10.
+Pricing: Free.
 
-**Pricing:** free tier of 2,000 signup verifications a month; paid plans scale from there at startup-friendly rates.
+---
 
-It is #1 in this tier because it is the only tool here that answers the human-or-bot question and connects the answer to the ad pipeline. The honest limitations above are exactly why that ranking is credible.
+**2. disposable/disposable (the 100k list)**
 
-**Roundtable.**
+The Good: Larger surface area. Catches more obscure disposable providers. Free.
 
-**What it is:** a Proof-of-Human API using invisible behavioral biometrics - typing cadence, cursor motion, scroll dynamics - to verify humans without CAPTCHA.
+Frustrations: Same decay problem. False positive rate is higher because the list is broader. Some legitimate domains have ended up on there.
 
-**What it does well:** it claims 87 percent bot-detection accuracy versus 69 percent for [reCAPTCHA](/alternative/recaptcha-alternative) and 33 percent for Turnstile, and integrates without changing your form widgets.
+Wish List: Confidence scores per domain. Faster prune cadence on false positives.
 
-**Where it breaks:** 87 percent means roughly one in eight bots still passes, and at scale that is a lot of fake sessions. It identifies bots during a session but has no integration with [Meta CAPI](/meta-conversion-api) or Google Enhanced Conversions, so the conversion events those detected bots already fired keep training your ad algorithms. The continuous scoring snippet runs throughout the session, which raises [GDPR](/resources/best-gdpr-consent-tool-2026) Article 22 automated-profiling questions for EU users.
+Value for Money: 7/10. Better surface, more false positives.
 
-**Value for money:** 7/10.
+Pricing: Free.
 
-**Pricing:** from $99/month (Starter); enterprise custom, no published mid-tier.
+---
 
-### Tier 2 - auth platforms with bot defense attached
+## Tier 2: the deliverability APIs (often miscategorized)
 
-These are authentication products. They guard the login door. None of them clean what happens to data after the door.
+These tools check whether an email will land. They include some disposable detection as a side effect. People reach for them because they're well-marketed.
 
-**Stytch.**
+**3. ZeroBounce**
 
-**What it is:** a full auth platform - passwordless, MFA, SSO, SCIM - with bot detection and device intelligence built into one SDK.
+The Good: Solid deliverability validation. Decent disposable detection on common providers. Strong reporting.
 
-**What it does well:** strong bot detection at the auth event itself, and the most generous free tier in the category at 10,000 MAU.
+Frustrations: Built for marketing list cleanup, not signup fraud. Disposable detection misses campaign-specific throwaway domains. API costs add up at scale.
 
-**Where it breaks:** the bot defense only fires at explicit auth events - signup, login, password reset. The broad surface of unauthenticated browsing, which generates most of your ad conversion events, is unprotected. It has no CAPI integration, so anonymous bots that browse and convert are invisible to it. The free tier resets monthly and the enterprise step-up is steep - roughly $25,000/year for 10,000 MAU.
+Wish List: Anti-fraud focus. Real-time signup-flow integration.
 
-**Value for money:** 8/10 for auth, 2/10 for ad-data quality.
+Value for Money: 7/10 for deliverability. 6/10 for fraud.
 
-**Pricing:** free to 10,000 MAU, then pay-as-you-go.
+Pricing: Pay-as-you-go from $16 per 2,000 verifications.
 
-**Clerk.**
+---
 
-**What it is:** developer-first auth with pre-built React and Next.js components.
+**4. Kickbox**
 
-**What it does well:** fast path to production-grade auth, and as of February 2026 a doubled free tier of 50,000 MRU.
+The Good: Cleanest API in the deliverability space. Strong on bounce reduction.
 
-**Where it breaks:** bot detection is Cloudflare Turnstile, which is an optional add-on and itself a third-party script that uBlock and Brave block - the gap is real. Most Clerk apps ship with no bot challenge at all, turning a generous free tier into a funnel for fake signups. There is no mechanism to flag bot-sourced events before they hit CAPI or [GA4](/alternative/ga4-alternative). The February 2026 restructure also moved SAML/OIDC to metered [pricing](/pricing) and gated SOC 2 artifacts to the $250/month Business plan.
+Frustrations: Same deliverability vs fraud confusion. Limited bypass coverage.
 
-**Value for money:** 7/10.
+Wish List: Anti-fraud product line.
 
-**Pricing:** free 50K MRU; Pro $20/mo; Business $250/mo.
+Value for Money: 7/10.
 
-**Auth0.**
+Pricing: Pay-as-you-go from $0.008 per verification.
 
-**What it is:** the mature CIAM incumbent, now Auth0 by Okta.
+---
 
-**What it does well:** broad SSO coverage, anomaly detection, a generous 25,000 MAU free tier.
+**5. EmailGuard**
 
-**Where it breaks:** bot detection is opt-in and needs manual CAPTCHA configuration - ship the default and you get nothing. Auth0's own data admits 21 percent of bots pass even when detection is on. No mechanism flags bot-sourced records before they reach Meta CAPI or Google Enhanced Conversions. MAU pricing spikes hard above the free tier.
+The Good: Cheap. Decent deliverability layer. Useful for low-ticket B2C.
 
-**Value for money:** 7/10.
+Frustrations: Limited fraud signal depth.
 
-**Pricing:** free 25K MAU; B2C Essentials $35/mo; Professional $240/mo.
+Wish List: Catch-all detection.
 
-**Supabase Auth.**
+Value for Money: 7/10 at the price.
 
-**What it is:** the most developer-friendly open-source auth, with built-in row-level security.
+Pricing: From $9/mo.
 
-**What it does well:** hCaptcha and Turnstile support, IP rate limiting, 50,000 MAU free - the default for indie hackers.
+---
 
-**Where it breaks:** CAPTCHA is opt-in and most starter templates skip it, so the majority of production Supabase apps ship with zero bot defense on auth. Its per-IP rate limit caps at 30 requests, which residential proxy networks bypass trivially. No CAPI integration. In a bot attack, fake accounts inflate MAU and your bill with no native alerting.
+## Tier 3: the anti-fraud APIs
 
-**Value for money:** 8/10 for auth cost, 5/10 for fraud protection.
+These tools are built for signup-fraud, not deliverability. Detection signal is broader. Pricing is higher.
 
-**Pricing:** free 50K MAU; Pro $25/mo.
+**6. IPQualityScore (IPQS)**
 
-**Kinde.**
+The Good: One of the most comprehensive risk APIs. Strong disposable detection. Good IP intelligence layer. Real-time scoring.
 
-**What it is:** a complete auth stack - SSO, MFA, feature flags, RBAC - pitched as a cheaper Auth0.
+Frustrations: Pricing isn't friendly to sub-$5K-deal B2C. Documentation can be dense. False positive tuning takes work.
 
-**What it does well:** a genuinely generous free tier to 10,500 MAU and transparent per-MAU pricing.
+Wish List: SMB-friendly tier.
 
-**Where it breaks:** CAPTCHA integration is optional and must be manually wired - out of the box, Kinde has no bot defense beyond rate limits. It authenticates the session and then has no visibility into whether that user is a bot or what signals flow downstream.
+Value for Money: 8/10 enterprise. 6.5/10 SMB.
 
-**Value for money:** 8/10 for auth itself.
+Pricing: From $99/mo, scales up fast.
 
-**Pricing:** free to 10,500 MAU; Pro $25/mo plus $0.0165/MAU.
+---
 
-**Firebase Auth.**
+**7. Castle**
 
-**What it is:** Google's auth platform, deeply tied to the Firebase and GCP ecosystem.
+The Good: Strong campaign-specific throwaway domain detection. Publishes the Fraudulent Email Domain Tracker monthly. Good behavioral signal layer.
 
-**What it does well:** a very generous 50,000 MAU free tier and the lowest-friction choice for Google-ecosystem apps.
+Frustrations: Mid-market pricing. Setup curve is real.
 
-**Where it breaks:** zero native bot detection - it authenticates anyone who completes the flow. Adding reCAPTCHA Enterprise costs separately and needs custom wiring. Bot-sourced accounts are indistinguishable from human ones in GA4 and Firestore. SMS verification pricing is opaque and country-dependent, and bot-driven SMS flows have produced surprise five-figure bills.
+Wish List: SMB tier.
 
-**Value for money:** 6/10.
+Value for Money: 7.5/10.
 
-**Pricing:** free to 50K MAU; $0.0055/MAU above.
+Pricing: Quote-driven.
 
-**WorkOS.**
+---
 
-**What it is:** enterprise-auth building blocks - SSO, SCIM, M2M auth - via clean APIs.
+**8. SEON**
 
-**What it does well:** cuts weeks off enterprise-readiness work, and the user-management tier is free to 1M MAU.
+The Good: Strong identity enrichment. Social profile lookups. EU-friendly.
 
-**Where it breaks:** it handles credential-stuffing at the auth layer but has zero visibility into bot-contaminated analytics or ad-[click fraud](/fraud-traffic-validation) upstream of login. SSO is $125/month per connection, which scales painfully. The hosted AuthKit UI hard-codes US-hosted WorkOS CDN assets, which creates friction for strict-CSP or EU data-residency requirements.
+Frustrations: Per-API-call pricing adds up. UI is heavier than competitors.
 
-**Value for money:** 7/10.
+Wish List: Lighter pricing.
 
-**Pricing:** user management free to 1M MAU; SSO $125/mo per connection.
+Value for Money: 7/10.
 
-**Descope.**
+Pricing: Quote.
 
-**What it is:** a no-code auth flow builder with native bot protection and a 2026 Agentic Identity Hub for managing AI agents as identities.
+---
 
-**What it does well:** visual workflow design without engineering overhead.
+**9. Sift**
 
-**Where it breaks:** bot protection is paywalled at the $799/month Growth tier - teams on Free or the $249/month Pro plan have no bot defense in their auth flows at all, a gap disclosed only in a feature comparison table. It has no downstream data governance, so bot accounts that pass auth generate real session events that propagate uncleaned.
+The Good: Enterprise-grade fraud detection. ThreatClusters consortium model. Strong against ATO.
 
-**Value for money:** 5/10.
+Frustrations: Enterprise-only. Not for SMB. Long sales cycle.
 
-**Pricing:** free 7,500 MAU; Pro $249/mo; Growth $799/mo.
+Wish List: SMB self-serve.
 
-**Frontegg.**
+Value for Money: 8/10 enterprise.
 
-**What it is:** an opinionated B2B SaaS auth platform with a self-service admin portal, multi-tenancy, and SCIM.
+Pricing: Six figures typical.
 
-**What it does well:** hosted SSO and tenant management out of the box, saving months of enterprise-auth engineering.
+---
 
-**Where it breaks:** no native bot detection at all - fake B2B tenant creation goes undetected, and PLG products on Frontegg get a steady stream of fake trial signups. The jump from the 7,500 MAU free tier to the $299/month Growth plan is steep with nothing in between.
+**10. Verisoul**
 
-**Value for money:** 7/10.
+The Good: Newer entrant. Strong product-led growth. Decent SMB tier.
 
-**Pricing:** free 7,500 MAU; Growth $299/mo.
+Frustrations: Smaller signal network than the bigger players. Brand is newer.
 
-### Tier 3 - CAPTCHA platforms
+Wish List: More CRM integrations.
 
-**GeeTest.**
+Value for Money: 7/10 SMB.
 
-**What it is:** a behavioral CAPTCHA with 7-layer dynamic protection analyzing user behavior, device, and network signals.
+Pricing: From around $99/mo last we checked.
 
-**What it does well:** a strong track record in Asian markets and adaptive difficulty.
+---
 
-**Where it breaks:** it loads its challenge widget as a third-party script from GeeTest's CDN, which uBlock and Brave block - particularly in the EU, where privacy extensions are common - so bots with blocklists active bypass the challenge entirely. GeeTest bypass is openly sold by solver services for fractions of a cent per solve. China-headquartered infrastructure raises EU and US data-residency questions.
+**11. Arkose Labs**
 
-**Value for money:** 5/10.
+The Good: Best-in-class enterprise bot mitigation. Strong agentic AI defense.
 
-**Pricing:** custom quote only.
+Frustrations: Enterprise-only. Not built for the disposable-email-blocker question specifically.
 
-**FunCaptcha.**
+Wish List: SMB tier.
 
-**What it is:** the game-like CAPTCHA brand, fully absorbed into [Arkose](/alternative/arkose-alternative) Titan in January 2026.
+Value for Money: 8/10 enterprise.
 
-**What it does well:** the underlying visual-challenge technology is mature and now backs Arkose's proof-of-work system.
+Pricing: Quote.
 
-**Where it breaks:** FunCaptcha as a standalone product is effectively dead - teams searching for it find outdated integrations. The challenge widget loads from Arkose's CDN as a third-party script that uBlock and Brave block, so headless bots with blocklists skip it. Solver services sell Arkose bypass cheaply. Migrating legacy FunCaptcha integrations to Titan forces a contract renegotiation.
+---
 
-**Value for money:** 5/10.
+**12. FingerprintJS**
 
-**Pricing:** now Arkose Titan, custom quote only.
+The Good: Browser fingerprinting is solid. Useful as a signal layer alongside email checks.
 
-### Tier 4 - adjacent tools people land on by accident
+Frustrations: Not a disposable email blocker. Use as one layer in a stack.
 
-These are good products for their actual jobs. They are not disposable-email blockers, and buying them to solve fake signups is a scope mismatch.
+Wish List: Bundled email check.
 
-**EmailGuard.**
+Value for Money: 7.5/10 fingerprint.
 
-**What it is:** a cold-email deliverability monitor - inbox placement testing, blacklist monitoring, spam-filter simulation.
+Pricing: From $80/mo.
 
-**What it does well:** it is genuinely the go-to for cold outreach teams running many sending domains.
+---
 
-**Where it breaks:** its email verification (3,000 credits/month on Pro) checks syntax, domain validity, and mailbox existence - so it catches some bot-generated addresses - but it is a deliverability monitor, not a bot blocker. It verifies that an address is technically valid; it has no view into whether a real human made the signup. Bot-generated but valid addresses pass and contaminate your lists.
+**13. Castle.io, Roundtable, Rupt, SHIELD, Kount, Sardine, Onfido, Jumio, Nuvei Identity**
 
-**Value for money:** 6/10 for deliverability, poor fit for lead-quality validation.
+These play across identity verification, fraud scoring, and KYC. Most are enterprise-priced. Useful at scale, overkill for a 'disposable email blocker' question. Detailed dossiers only matter if you're already running a regulated product.
 
-**Pricing:** free tier; Pro $49/mo; Business $129/mo.
+---
 
-**Sardine.**
+## Tier 4: the auth and CAPTCHA layer
 
-**What it is:** a fraud, AML, and risk platform for fintech and embedded finance, fusing device intelligence and behavioral biometrics.
+These are relevant because most teams asking 'how do I block disposable emails' end up adding multiple layers. CAPTCHA and auth providers play here.
 
-**What it does well:** a single check that satisfies both fraud prevention and BSA/AML compliance - strong, deep technology.
+**14. Clerk, Auth0, Stytch, Frontegg, Supabase Auth, Firebase Auth, Descope, Kinde, WorkOS**
 
-**Where it breaks:** its device intelligence catches bot activity, but only on events the product explicitly sends to Sardine - passive web bot contamination is out of scope. It has no analytics layer and no ad-platform integration, so it does not clean conversion pipelines. The bigger blocker is price: an assumed platform minimum near $145,000/year puts it out of reach for the Series A fintechs who are the natural early fraud buyers.
+The Good: Most expose pre-signup hooks where you can plug in disposable-email checks. Clerk and Auth0 have the broadest middleware ecosystems.
 
-**Value for money:** 5/10 - unmatched for fintech compliance, irrelevant for signup-list hygiene.
+Frustrations: None of them ship a serious disposable-email blocker out of the box. You bring your own list or API.
 
-**Pricing:** not public; estimated ~$145k/year minimum.
+Wish List: First-class disposable-email integration in the auth flow.
 
-**Nuvei Identity.**
+Value for Money: 8/10 for auth. They aren't disposable-email blockers per se.
 
-**What it is:** KYC, tokenization, and fraud scoring bundled inside the Nuvei payment stack.
+Pricing: Free tiers, scales with MAU.
 
-**What it does well:** one contract and one API for payments plus identity if you are already a Nuvei merchant.
+---
 
-**Where it breaks:** its 200-plus fraud rules catch automated transaction fraud at checkout, but nothing pre-payment - the entire browse-and-abandon session is already gone before its logic fires. It only makes sense if Nuvei is already your PSP; switching processors for identity tooling is a months-long project nobody undertakes. Pricing is entirely custom and opaque.
+**15. Cloudflare Turnstile, hCaptcha, reCAPTCHA, FunCaptcha (Arkose), GeeTest**
 
-**Value for money:** 5/10.
+The Good: CAPTCHA layer adds bot friction. Cloudflare Turnstile is the most user-friendly.
 
-**Pricing:** custom quote only.
+Frustrations: 99.9 percent of CAPTCHAs are solved by bots in 2026 (the 'Why CAPTCHA is dead' thesis). False sense of security.
 
-**Jumio.**
+Wish List: Behavioral signal that doesn't add user friction.
 
-**What it is:** high-accuracy document and biometric KYC across 200-plus countries.
+Value for Money: 6/10 as a primary fraud defense. 7/10 as a friction layer.
 
-**What it does well:** best-in-class verification accuracy, with AML screening in the same call.
+Pricing: Mostly free, paid tiers for enterprise.
 
-**Where it breaks:** its liveness detection blocks bots at the KYC step, but bots that never reach the verification funnel are invisible to it - pre-signup [bot traffic](/resources/best-invalid-traffic-detection) is not its problem. The liveness SDK loads client-side, and 25 to 35 percent of users on aggressive privacy tools can have SDK loads disrupted, causing verification drop-off Jumio does not flag as a script-blocking event. Pricing is quote-only with no self-serve tier.
+---
 
-**Value for money:** 5/10.
+## Tier 5: the bundled signup-trust stack
 
-**Pricing:** quote only; median contract ~$60k/year.
+This is the layer that bundles disposable email detection with IP intelligence, fingerprinting, and CAPI-conversion filtering. The 2026 frontier.
 
-**Onfido (now Entrust IDV).**
+**16. SignUp Cops (DataCops)**
 
-**What it is:** AI-powered document and biometric verification, rebranded after the 2024 Entrust acquisition.
+The Good: Bundles disposable email detection (160K plus fraud email domains tracked, refreshed continuously) with IP intelligence (146.4 billion datacenter IPs, 202 billion residential, 11.9 billion VPN endpoints, 620 million proxy and anonymizer IPs), browser fingerprinting (canvas, WebGL, audio, screen, fonts), and real-time risk scoring at the signup form. The branded thesis is 'why CAPTCHA is dead': humans behind the fraud, 99.9 percent of CAPTCHAs solved by bots. Replaces the reCAPTCHA plus email-verification stack with one signal pipeline. Plus, the same first-party CNAME tag that does the signup check also feeds Meta and Google CAPI, so fraudulent signups never pollute your ad-bidding training data downstream.
 
-**What it does well:** market-leading verification accuracy and a mature decision engine that cuts manual review sharply.
+Frustrations: SOC 2 Type II in progress, not complete. Brand is newer than IPQualityScore or Castle. Fewer enterprise integrations than Sift or Arkose.
 
-**Where it breaks:** liveness detection blocks bots only when the KYC flow is explicitly invoked - credential stuffers and scraper bots that never reach verification are invisible. It ends at the identity decision; it has no role in analytics or ad-signal hygiene. The mid-acquisition rebrand adds integration risk with inconsistent documentation. Quote-only pricing with extreme variance.
+Wish List: Faster SOC 2. More fraud email domains beyond the 160K tracked today.
 
-**Value for money:** 6/10.
+Value for Money: 8.5/10 if you want the bundle (signup fraud plus tracking plus CAPI plus consent).
 
-**Pricing:** quote only.
+Pricing: Free at 500 signup verifications, paid tiers scale up. Free tier is real.
 
-**SHIELD.**
+---
 
-**What it is:** device fingerprinting and fraud intelligence built around a patented persistent device ID.
+## So what should you actually use?
 
-**What it does well:** ultra-resilient device identification that survives factory resets - the strongest persistent device graph for mobile-first fraud, especially in Southeast Asia.
+The decision tree:
 
-**Where it breaks:** it scores a device at a product interaction point and ends there - no analytics integration, no ad-platform pipeline, no pre-product signal. Its strength is mobile-first SEA; for web-first EU or US brands it is less differentiated. Its always-on session monitoring raises persistent GDPR legal-basis questions in EU contexts. All pricing is custom with no public tiers.
+Want the simplest free baseline for low-ticket B2C? Pull the disposable-email-domains GitHub list. Refresh weekly. Add subaddressing normalization (strip everything after the plus sign). Add an Apple Hide My Email exception. That gets you 70 to 80 percent of the value at zero dollars.
 
-**Value for money:** 6/10.
+Need email cleanup for marketing list deliverability? ZeroBounce or Kickbox. Don't conflate this with signup fraud.
 
-**Pricing:** custom quote only.
+Running a marketplace, credit-based product, or referral program where signup quality is monetary? Layer up. Static list plus IPQualityScore or Castle plus FingerprintJS. Or buy the bundled stack from DataCops or one of the other Tier 5 entrants.
 
-## Decision guide
+Care about Apple Hide My Email being whitelisted by default? Most static lists lock out iCloud Plus users out of the box. Pick a tool that handles this exception explicitly.
 
-- **Low-ticket B2C, just need to cut casual trial abuse:** a daily-updated open-source domain list plus +tag normalization. Free, and 80 percent of the job.
-- **B2C marketplace where a fake account costs real money:** DataCops SignUp Cops - score the signup, do not just check the domain.
-- **You are running paid ads and bot signups are poisoning your campaigns:** DataCops - the only option here that links the signup verdict to the ad pipeline.
-- **You are building auth from scratch and want bot defense in the same SDK:** Stytch, knowing it covers the auth event only.
-- **Indie hacker on a tight budget:** Supabase Auth or Kinde free tier - but turn the CAPTCHA on.
-- **Fintech with real AML obligations and Series B-plus budget:** Sardine.
-- **High-stakes identity verification (regulated onboarding):** Jumio or Onfido.
-- **You think a domain blocklist alone has solved your fake-signup problem:** it has not - re-read the gap section.
-- **You need SOC 2 Type II in hand today:** an attested incumbent - DataCops is still in verification.
+Need GDPR-grade signup verification with first-party data residency? DataCops or SEON.
 
-## The mistake that keeps this problem alive
+Already deeply embedded in Sift or Arkose at enterprise scale? Stay there. The migration cost beats the price savings.
 
-Here is the error I see on nearly every team: treating "block disposable emails" as a finished feature. You ship the list, the obvious tempmail signups stop, the ticket gets closed.
+---
 
-But the disposable email was never the disease. It was the laziest symptom of it. The competent attacker - the one running 650 accounts off one device fingerprint - uses real-looking addresses precisely because they know you are checking the domain. Your blocklist filtered out the amateurs and gave you a dashboard that says the problem is solved while the expensive fraud walks straight through.
+## The mistake I see people make
 
-So go run one check. Pull your last 500 signups, and instead of asking how many used a disposable domain, ask how many ever logged in a second time. If that number is grim, your email blocker is working exactly as designed - and it is still not catching the thing that matters. What is actually verifying the human in your funnel?
+The most common signup-fraud failure in 2026 is hard-blocking on email alone. Team installs an API that returns 'this is disposable', the form rejects it, and a percentage of real customers (paying iCloud Plus users on Apple Hide My Email, plus addressers, catch-all domain owners) get locked out at signup. Conversion drops. Revenue drops.
+
+The fix is soft-restrict. Allow the signup. Restrict free-trial features, lower quotas, mark for manual review. Email is one signal, not a binary gate. Layer it with IP intelligence, fingerprinting, and behavioral signals. Hard-block only the highest-confidence fraud (campaign-specific throwaway domains plus a known bad IP plus a fingerprint match to a previous abuser).
+
+---
+
+## A few more things worth saying out loud
+
+The bus-factor risk on solo-maintained GitHub blocklists is worth a sentence. The most popular disposable-email-domains repos have been maintained by small numbers of people for over a decade. Updates are mostly reliable. But if you're betting your signup pipeline on a single GitHub repo with one maintainer, you should mirror it locally and have a fallback. Most teams skip this and find out the hard way when an upstream PR sits unreviewed for three months and a wave of new throwaway domains slips through.
+
+The 'is this a bot or a human-driven attack' question matters more than it used to. SignUp Cops at DataCops leans into the thesis that 99.9 percent of CAPTCHAs are solved by bots in 2026 and that the modern fraud surface is humans behind the operation, not just scripts. That changes the detection model. Fingerprinting and behavioral signals beat 'prove you're human' challenges. Don't add a CAPTCHA and call it done. The data says it's already not working.
+
+The Apple Hide My Email exception deserves one more mention because we keep seeing teams get this wrong. privaterelay.appleid.com aliases are paying iCloud Plus subscribers. Real customers. The TechCrunch March 2026 piece on FBI obtaining identities behind iCloud aliases makes one thing clear: these are real people with real identities behind them, not anonymous fraudsters. Blocking the TLD blocks paying customers. We've seen teams lose 5 to 15 percent of conversion to this single misconfiguration.
+
+The catch-all domain detection problem is harder than the listicles suggest. Anyone owning a domain can configure a catch-all. Real businesses do this all the time. A blanket 'is this a catch-all' check will lock out small business customers. The fix is to layer with IP intelligence, fingerprinting, and behavioral signals. Catch-all alone is not a fraud signal. Catch-all plus a known-bad IP plus a fingerprint match to a previous abuser is.
+
+The trial-to-paid conversion gap (17.8 percent for legitimate signups vs 0.5 percent for disposable-email signups) is the line that should be on every product team's wall. The bidding model can't tell them apart unless you filter the CAPI event before it fires. The risk dashboard catching the fraud after the fact doesn't help the LTV model.
+
+---
+
+## Now your turn
+
+What's your current disposable-email defense? Static list, paid API, layered stack? Have you measured the false positive rate, or are you flying blind on whether you're locking out real customers? Drop the stack and the rough numbers. The honest part of these threads is where the rest of us learn what actually works.
 
 ---
 
